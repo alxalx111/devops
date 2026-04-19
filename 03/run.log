@@ -1,0 +1,210 @@
+elv@ub24:~$ ./create-infra.sh
+=== Создание инфраструктуры в Yandex Cloud ===
+1. Создаю каталог dz03...
+WARNING: Cannot connect to YC tool initialization service. Network connectivity to the service is required for cli version control. In case you are using yc in an isolated environment,                      you may turn off this warning by setting env YC_CLI_INITIALIZATION_SILENCE=true
+
+done (1s)
+id: b1g064aj5lufggdbdqvv
+cloud_id: b1gn2dlsjvn3na6p6rhr
+created_at: "2026-04-19T13:01:58Z"
+name: dz03
+status: ACTIVE
+
+2. Устанавливаю каталог по умолчанию...
+WARNING: Cannot connect to YC tool initialization service. Network connectivity to the service is required for cli version control. In case you are using yc in an isolated environment,                      you may turn off this warning by setting env YC_CLI_INITIALIZATION_SILENCE=true
+
+   Каталог ID: b1g064aj5lufggdbdqvv
+3. Создаю сеть localnet...
+WARNING: Cannot connect to YC tool initialization service. Network connectivity to the service is required for cli version control. In case you are using yc in an isolated environment,                      you may turn off this warning by setting env YC_CLI_INITIALIZATION_SILENCE=true
+
+id: enp7aufs20sepgc8uheg
+folder_id: b1g064aj5lufggdbdqvv
+created_at: "2026-04-19T13:02:03Z"
+name: localnet
+default_security_group_id: enp2ks7h3l2jjmf6k7fb
+
+4. Создаю подсеть subnet-10...
+WARNING: Cannot connect to YC tool initialization service. Network connectivity to the service is required for cli version control. In case you are using yc in an isolated environment,                      you may turn off this warning by setting env YC_CLI_INITIALIZATION_SILENCE=true
+
+id: fl8k97or4civ07fo1taf
+folder_id: b1g064aj5lufggdbdqvv
+created_at: "2026-04-19T13:02:08Z"
+name: subnet-10
+network_id: enp7aufs20sepgc8uheg
+zone_id: ru-central1-d
+v4_cidr_blocks:
+  - 10.10.10.0/24
+
+WARNING: Cannot connect to YC tool initialization service. Network connectivity to the service is required for cli version control. In case you are using yc in an isolated environment,                      you may turn off this warning by setting env YC_CLI_INITIALIZATION_SILENCE=true
+
+   Subnet ID: fl8k97or4civ07fo1taf
+5. Создаю bastion...
+WARNING: Cannot connect to YC tool initialization service. Network connectivity to the service is required for cli version control. In case you are using yc in an isolated environment,                      you may turn off this warning by setting env YC_CLI_INITIALIZATION_SILENCE=true
+
+done (1m1s)
+id: fv46idjf77dsgchgnupd
+folder_id: b1g064aj5lufggdbdqvv
+created_at: "2026-04-19T13:02:15Z"
+name: bastion
+zone_id: ru-central1-d
+platform_id: standard-v4a
+resources:
+  memory: "2147483648"
+  cores: "2"
+  core_fraction: "20"
+status: RUNNING
+metadata_options:
+  gce_http_endpoint: ENABLED
+  aws_v1_http_endpoint: ENABLED
+  gce_http_token: ENABLED
+  aws_v1_http_token: DISABLED
+  aws_v2_http_endpoint: DISABLED
+  aws_v2_http_token: DISABLED
+boot_disk:
+  mode: READ_WRITE
+  device_name: fv41tdqgjda1c1pn9qhk
+  auto_delete: true
+  disk_id: fv41tdqgjda1c1pn9qhk
+network_interfaces:
+  - index: "0"
+    mac_address: d0:0d:69:36:6f:39
+    subnet_id: fl8k97or4civ07fo1taf
+    primary_v4_address:
+      address: 10.10.10.254
+      one_to_one_nat:
+        address: 81.26.177.148
+        ip_version: IPV4
+serial_port_settings:
+  ssh_authorization: OS_LOGIN
+gpu_settings: {}
+fqdn: bastion.ru-central1.internal
+scheduling_policy:
+  preemptible: true
+network_settings:
+  type: STANDARD
+placement_policy: {}
+hardware_generation:
+  legacy_features:
+    pci_topology: PCI_TOPOLOGY_V2
+application: {}
+
+6. Создаю vm1...
+WARNING: Cannot connect to YC tool initialization service. Network connectivity to the service is required for cli version control. In case you are using yc in an isolated environment,                      you may turn off this warning by setting env YC_CLI_INITIALIZATION_SILENCE=true
+
+done (45s)
+id: fv4qsptokjiqlm7uec00
+folder_id: b1g064aj5lufggdbdqvv
+created_at: "2026-04-19T13:03:19Z"
+name: vm1
+zone_id: ru-central1-d
+platform_id: standard-v4a
+resources:
+  memory: "2147483648"
+  cores: "2"
+  core_fraction: "20"
+status: RUNNING
+metadata_options:
+  gce_http_endpoint: ENABLED
+  aws_v1_http_endpoint: ENABLED
+  gce_http_token: ENABLED
+  aws_v1_http_token: DISABLED
+  aws_v2_http_endpoint: DISABLED
+  aws_v2_http_token: DISABLED
+boot_disk:
+  mode: READ_WRITE
+  device_name: fv4utudttmkacmind8gt
+  auto_delete: true
+  disk_id: fv4utudttmkacmind8gt
+network_interfaces:
+  - index: "0"
+    mac_address: d0:0d:1a:e6:7b:8a
+    subnet_id: fl8k97or4civ07fo1taf
+    primary_v4_address:
+      address: 10.10.10.11
+serial_port_settings:
+  ssh_authorization: OS_LOGIN
+gpu_settings: {}
+fqdn: vm1.ru-central1.internal
+scheduling_policy:
+  preemptible: true
+network_settings:
+  type: STANDARD
+placement_policy: {}
+hardware_generation:
+  legacy_features:
+    pci_topology: PCI_TOPOLOGY_V2
+application: {}
+
+7. Создаю vm2...
+WARNING: Cannot connect to YC tool initialization service. Network connectivity to the service is required for cli version control. In case you are using yc in an isolated environment,                      you may turn off this warning by setting env YC_CLI_INITIALIZATION_SILENCE=true
+
+done (51s)
+id: fv4hl4jee48eci0g3ojh
+folder_id: b1g064aj5lufggdbdqvv
+created_at: "2026-04-19T13:04:07Z"
+name: vm2
+zone_id: ru-central1-d
+platform_id: standard-v4a
+resources:
+  memory: "2147483648"
+  cores: "2"
+  core_fraction: "20"
+status: RUNNING
+metadata_options:
+  gce_http_endpoint: ENABLED
+  aws_v1_http_endpoint: ENABLED
+  gce_http_token: ENABLED
+  aws_v1_http_token: DISABLED
+  aws_v2_http_endpoint: DISABLED
+  aws_v2_http_token: DISABLED
+boot_disk:
+  mode: READ_WRITE
+  device_name: fv4corf61ui4cffpdv5s
+  auto_delete: true
+  disk_id: fv4corf61ui4cffpdv5s
+network_interfaces:
+  - index: "0"
+    mac_address: d0:0d:11:a9:26:e7
+    subnet_id: fl8k97or4civ07fo1taf
+    primary_v4_address:
+      address: 10.10.10.12
+serial_port_settings:
+  ssh_authorization: OS_LOGIN
+gpu_settings: {}
+fqdn: vm2.ru-central1.internal
+scheduling_policy:
+  preemptible: true
+network_settings:
+  type: STANDARD
+placement_policy: {}
+hardware_generation:
+  legacy_features:
+    pci_topology: PCI_TOPOLOGY_V2
+application: {}
+
+8. Получаю внешний IP bastion...
+WARNING: Cannot connect to YC tool initialization service. Network connectivity to the service is required for cli version control. In case you are using yc in an isolated environment,                      you may turn off this warning by setting env YC_CLI_INITIALIZATION_SILENCE=true
+
+   Bastion IP: 81.26.177.148
+9. Настраиваю ssh-agent на bastion...
+Warning: Permanently added '81.26.177.148' (ED25519) to the list of known hosts.
+10. Копирую приватный ключ на bastion...
+=== Инфраструктура создана успешно! ===
+Подключение: ssh -i ~/.ssh/id_ed25519_otus_yc yc-user@81.26.177.148
+На bastion: ssh 10.10.10.11 или ssh 10.10.10.12
+elv@ub24:~$
+elv@ub24:~$
+elv@ub24:~$
+elv@ub24:~$
+elv@ub24:~$ yc compute instance list
+WARNING: Cannot connect to YC tool initialization service. Network connectivity to the service is required for cli version control. In case you are using yc in an isolated environment, you may turn off this warning by setting env YC_CLI_INITIALIZATION_SILENCE=true
+
++----------------------+---------+---------------+---------+---------------+--------------+
+|          ID          |  NAME   |    ZONE ID    | STATUS  |  EXTERNAL IP  | INTERNAL IP  |
++----------------------+---------+---------------+---------+---------------+--------------+
+| fv46idjf77dsgchgnupd | bastion | ru-central1-d | RUNNING | 81.26.177.148 | 10.10.10.254 |
+| fv4hl4jee48eci0g3ojh | vm2     | ru-central1-d | RUNNING |               | 10.10.10.12  |
+| fv4qsptokjiqlm7uec00 | vm1     | ru-central1-d | RUNNING |               | 10.10.10.11  |
++----------------------+---------+---------------+---------+---------------+--------------+
+
+elv@ub24:~$
