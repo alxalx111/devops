@@ -1,0 +1,38 @@
+stages:
+  - test
+  - notify
+
+variables:
+  TEST_VALUE: "3"
+
+test_job:
+  stage: test
+  script:
+    - |
+      if [ $TEST_VALUE -ge 5 ]; then
+        echo "✅ SUCCESS: Condition met ($TEST_VALUE >= 5)"
+        echo "JOB_STATUS=success" > job.env
+      else
+        echo "❌ FAILED: Condition not met ($TEST_VALUE < 5)"
+        echo "JOB_STATUS=failed" > job.env
+        exit 1
+      fi
+  artifacts:
+    reports:
+      dotenv: job.env
+
+telegram_notify:
+  stage: notify
+  needs: ["test_job"]
+  when: always                                    
+  script:
+    - |
+      if [ "$JOB_STATUS" = "success" ]; then
+        MESSAGE="✅ PIPELINE SUCCESS ✅%0A%0AProject: ${CI_PROJECT_NAME}%0ABranch: ${CI_COMMIT_BRANCH}%0ACommit: ${CI_COMMIT_SHORT_SHA}%0AStatus: SUCCESS"
+      else
+        MESSAGE="❌ PIPELINE FAILED ❌%0A%0AProject: ${CI_PROJECT_NAME}%0ABranch: ${CI_COMMIT_BRANCH}%0ACommit: ${CI_COMMIT_SHORT_SHA}%0AStatus: FAILED"
+      fi
+      
+      curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+        -d chat_id="${TELEGRAM_CHAT_ID}" \
+        -d text="${MESSAGE}"
