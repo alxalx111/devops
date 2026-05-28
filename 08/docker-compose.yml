@@ -7,7 +7,7 @@ volumes:
   redis-data:
 
 services:
-  postgres-db:
+  db:
     image: postgres:15-alpine
     container_name: postgres-db
     environment:
@@ -57,9 +57,7 @@ services:
     networks:
       - voting-network
     depends_on:
-      redis:
-        condition: service_healthy
-      postgres-db:
+      db:
         condition: service_healthy
     restart: always
 
@@ -71,6 +69,6 @@ services:
     networks:
       - voting-network
     depends_on:
-      postgres-db:
+      db:
         condition: service_healthy
     restart: always

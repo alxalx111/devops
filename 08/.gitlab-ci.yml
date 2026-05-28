@@ -36,8 +36,18 @@ build_result:
 build_worker:
   stage: build
   script:
-    - docker build -t $IMAGE_NAME_WORKER:$IMAGE_TAG ./worker
-    - docker build -t $IMAGE_NAME_WORKER:latest ./worker
+    - |
+      docker build \
+        --build-arg BUILDPLATFORM=linux/amd64 \
+        --build-arg TARGETPLATFORM=linux/amd64 \
+        --build-arg TARGETARCH=amd64 \
+        -t $IMAGE_NAME_WORKER:$IMAGE_TAG ./worker
+    - |
+      docker build \
+        --build-arg BUILDPLATFORM=linux/amd64 \
+        --build-arg TARGETPLATFORM=linux/amd64 \
+        --build-arg TARGETARCH=amd64 \
+        -t $IMAGE_NAME_WORKER:latest ./worker
   tags:
     - docker
   only:
@@ -49,6 +59,8 @@ build_worker:
 
 push_vote:
   stage: push
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
     - docker push $IMAGE_NAME_VOTE:$IMAGE_TAG
     - docker push $IMAGE_NAME_VOTE:latest
@@ -61,6 +73,8 @@ push_vote:
 
 push_result:
   stage: push
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
     - docker push $IMAGE_NAME_RESULT:$IMAGE_TAG
     - docker push $IMAGE_NAME_RESULT:latest
@@ -73,6 +87,8 @@ push_result:
 
 push_worker:
   stage: push
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
     - docker push $IMAGE_NAME_WORKER:$IMAGE_TAG
     - docker push $IMAGE_NAME_WORKER:latest
@@ -90,35 +106,21 @@ push_worker:
 deploy:
   stage: deploy
   before_script:
-    - apt-get update -qq && apt-get install -y -qq openssh-client rsync
+    - sudo apt-get update -qq && sudo apt-get install -y -qq openssh-client rsync
     - eval $(ssh-agent -s)
     - echo "$VM_SSH_KEY" | tr -d '\r' | ssh-add - > /dev/null
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
     - ssh-keyscan -H $VM_IP >> ~/.ssh/known_hosts
   script:
-    # Копирование docker-compose.yml на ВМ
-    - scp docker-compose.yml $VM_USER@$VM_IP:~/
-    
-    # Деплой на ВМ с сохранением переменных в файл
-    - ssh $VM_USER@$VM_IP "
-        # Сохраняем переменные в файл .env
-        cat > ~/.env << 'EOF'
-CI_REGISTRY=$CI_REGISTRY
-CI_REGISTRY_USER=$CI_REGISTRY_USER
-CI_REGISTRY_PASSWORD=$CI_REGISTRY_PASSWORD
-EOF
-        
-        # Загружаем переменные из файла
-        source ~/.env
-        
-        # Логин в GitLab Registry
-        echo \"\$CI_REGISTRY_PASSWORD\" | docker login \$CI_REGISTRY -u \$CI_REGISTRY_USER --password-stdin 2>/dev/null
-        
-        # Идемпотентный деплой
-        docker compose down 2>/dev/null || true
-        docker compose pull
-        docker compose up -d
+    - scp -o StrictHostKeyChecking=no docker-compose.yml $VM_USER@$VM_IP:~/
+    - ssh -o StrictHostKeyChecking=no $VM_USER@$VM_IP "
+        echo '$CI_REGISTRY_PASSWORD' | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin 2>/dev/null &&
+        export CI_REGISTRY='$CI_REGISTRY' &&
+        export CI_REGISTRY_USER='$CI_REGISTRY_USER' &&
+        docker compose down 2>/dev/null || true &&
+        docker compose pull &&
+        docker compose up -d &&
         docker compose ps
       "
   tags:
