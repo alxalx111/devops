@@ -1,0 +1,131 @@
+stages:
+  - build
+  - push
+  - deploy
+
+variables:
+  IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+  IMAGE_NAME_VOTE: $CI_REGISTRY/devops/devops-2026-03/example-voting-app/voting-app
+  IMAGE_NAME_RESULT: $CI_REGISTRY/devops/devops-2026-03/example-voting-app/result-app
+  IMAGE_NAME_WORKER: $CI_REGISTRY/devops/devops-2026-03/example-voting-app/worker-app
+
+# ============================================
+# CI: Сборка Docker-образов
+# ============================================
+
+build_vote:
+  stage: build
+  script:
+    - docker build -t $IMAGE_NAME_VOTE:$IMAGE_TAG ./vote
+    - docker build -t $IMAGE_NAME_VOTE:latest ./vote
+  tags:
+    - docker
+  only:
+    - main
+
+build_result:
+  stage: build
+  script:
+    - docker build -t $IMAGE_NAME_RESULT:$IMAGE_TAG ./result
+    - docker build -t $IMAGE_NAME_RESULT:latest ./result
+  tags:
+    - docker
+  only:
+    - main
+
+build_worker:
+  stage: build
+  script:
+    - docker build -t $IMAGE_NAME_WORKER:$IMAGE_TAG ./worker
+    - docker build -t $IMAGE_NAME_WORKER:latest ./worker
+  tags:
+    - docker
+  only:
+    - main
+
+# ============================================
+# CD: Публикация образов в Registry
+# ============================================
+
+push_vote:
+  stage: push
+  script:
+    - docker push $IMAGE_NAME_VOTE:$IMAGE_TAG
+    - docker push $IMAGE_NAME_VOTE:latest
+  tags:
+    - docker
+  only:
+    - main
+  needs:
+    - build_vote
+
+push_result:
+  stage: push
+  script:
+    - docker push $IMAGE_NAME_RESULT:$IMAGE_TAG
+    - docker push $IMAGE_NAME_RESULT:latest
+  tags:
+    - docker
+  only:
+    - main
+  needs:
+    - build_result
+
+push_worker:
+  stage: push
+  script:
+    - docker push $IMAGE_NAME_WORKER:$IMAGE_TAG
+    - docker push $IMAGE_NAME_WORKER:latest
+  tags:
+    - docker
+  only:
+    - main
+  needs:
+    - build_worker
+
+# ============================================
+# CD: Деплой на Yandex Cloud
+# ============================================
+
+deploy:
+  stage: deploy
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq openssh-client rsync
+    - eval $(ssh-agent -s)
+    - echo "$VM_SSH_KEY" | tr -d '\r' | ssh-add - > /dev/null
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H $VM_IP >> ~/.ssh/known_hosts
+  script:
+    # Копирование docker-compose.yml на ВМ
+    - scp docker-compose.yml $VM_USER@$VM_IP:~/
+    
+    # Деплой на ВМ с сохранением переменных в файл
+    - ssh $VM_USER@$VM_IP "
+        # Сохраняем переменные в файл .env
+        cat > ~/.env << 'EOF'
+CI_REGISTRY=$CI_REGISTRY
+CI_REGISTRY_USER=$CI_REGISTRY_USER
+CI_REGISTRY_PASSWORD=$CI_REGISTRY_PASSWORD
+EOF
+        
+        # Загружаем переменные из файла
+        source ~/.env
+        
+        # Логин в GitLab Registry
+        echo \"\$CI_REGISTRY_PASSWORD\" | docker login \$CI_REGISTRY -u \$CI_REGISTRY_USER --password-stdin 2>/dev/null
+        
+        # Идемпотентный деплой
+        docker compose down 2>/dev/null || true
+        docker compose pull
+        docker compose up -d
+        docker compose ps
+      "
+  tags:
+    - docker
+  only:
+    - main
+  needs:
+    - push_vote
+    - push_result
+    - push_worker

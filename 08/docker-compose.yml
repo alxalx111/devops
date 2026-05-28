@@ -1,0 +1,76 @@
+networks:
+  voting-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+
+services:
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: postgres-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - voting-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    volumes:
+      - redis-data:/data
+    networks:
+      - voting-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  voting-app:
+    image: ${CI_REGISTRY}/devops/devops-2026-03/example-voting-app/voting-app:latest
+    container_name: voting-app
+    ports:
+      - "8080:80"
+    networks:
+      - voting-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: always
+
+  worker:
+    image: ${CI_REGISTRY}/devops/devops-2026-03/example-voting-app/worker-app:latest
+    container_name: worker
+    networks:
+      - voting-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres-db:
+        condition: service_healthy
+    restart: always
+
+  result-app:
+    image: ${CI_REGISTRY}/devops/devops-2026-03/example-voting-app/result-app:latest
+    container_name: result-app
+    ports:
+      - "8081:80"
+    networks:
+      - voting-network
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+    restart: always
