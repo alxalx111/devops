@@ -1,23 +1,27 @@
 stages:
   - build
-  - push
   - deploy
 
 variables:
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
   IMAGE_TAG: $CI_COMMIT_SHORT_SHA
   IMAGE_NAME_VOTE: $CI_REGISTRY/devops/devops-2026-03/example-voting-app/voting-app
   IMAGE_NAME_RESULT: $CI_REGISTRY/devops/devops-2026-03/example-voting-app/result-app
   IMAGE_NAME_WORKER: $CI_REGISTRY/devops/devops-2026-03/example-voting-app/worker-app
 
-# ============================================
-# CI: Сборка Docker-образов
-# ============================================
-
 build_vote:
   stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
     - docker build -t $IMAGE_NAME_VOTE:$IMAGE_TAG ./vote
     - docker build -t $IMAGE_NAME_VOTE:latest ./vote
+    - docker push $IMAGE_NAME_VOTE:$IMAGE_TAG
+    - docker push $IMAGE_NAME_VOTE:latest
   tags:
     - docker
   only:
@@ -25,9 +29,16 @@ build_vote:
 
 build_result:
   stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
     - docker build -t $IMAGE_NAME_RESULT:$IMAGE_TAG ./result
     - docker build -t $IMAGE_NAME_RESULT:latest ./result
+    - docker push $IMAGE_NAME_RESULT:$IMAGE_TAG
+    - docker push $IMAGE_NAME_RESULT:latest
   tags:
     - docker
   only:
@@ -35,78 +46,25 @@ build_result:
 
 build_worker:
   stage: build
-  script:
-    - |
-      docker build \
-        --build-arg BUILDPLATFORM=linux/amd64 \
-        --build-arg TARGETPLATFORM=linux/amd64 \
-        --build-arg TARGETARCH=amd64 \
-        -t $IMAGE_NAME_WORKER:$IMAGE_TAG ./worker
-    - |
-      docker build \
-        --build-arg BUILDPLATFORM=linux/amd64 \
-        --build-arg TARGETPLATFORM=linux/amd64 \
-        --build-arg TARGETARCH=amd64 \
-        -t $IMAGE_NAME_WORKER:latest ./worker
-  tags:
-    - docker
-  only:
-    - main
-
-# ============================================
-# CD: Публикация образов в Registry
-# ============================================
-
-push_vote:
-  stage: push
+  image: docker:latest
+  services:
+    - docker:dind
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
-    - docker push $IMAGE_NAME_VOTE:$IMAGE_TAG
-    - docker push $IMAGE_NAME_VOTE:latest
-  tags:
-    - docker
-  only:
-    - main
-  needs:
-    - build_vote
-
-push_result:
-  stage: push
-  before_script:
-    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
-  script:
-    - docker push $IMAGE_NAME_RESULT:$IMAGE_TAG
-    - docker push $IMAGE_NAME_RESULT:latest
-  tags:
-    - docker
-  only:
-    - main
-  needs:
-    - build_result
-
-push_worker:
-  stage: push
-  before_script:
-    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
-  script:
+    - docker build --build-arg BUILDPLATFORM=linux/amd64 --build-arg TARGETPLATFORM=linux/amd64 --build-arg TARGETARCH=amd64 -t $IMAGE_NAME_WORKER:$IMAGE_TAG ./worker
+    - docker build --build-arg BUILDPLATFORM=linux/amd64 --build-arg TARGETPLATFORM=linux/amd64 --build-arg TARGETARCH=amd64 -t $IMAGE_NAME_WORKER:latest ./worker
     - docker push $IMAGE_NAME_WORKER:$IMAGE_TAG
     - docker push $IMAGE_NAME_WORKER:latest
   tags:
     - docker
   only:
     - main
-  needs:
-    - build_worker
-
-# ============================================
-# CD: Деплой на Yandex Cloud
-# ============================================
 
 deploy:
   stage: deploy
   before_script:
-    - sudo apt-get update -qq && sudo apt-get install -y -qq openssh-client rsync
+    - apt-get update -qq && apt-get install -y -qq openssh-client rsync
     - eval $(ssh-agent -s)
     - echo "$VM_SSH_KEY" | tr -d '\r' | ssh-add - > /dev/null
     - mkdir -p ~/.ssh
@@ -115,12 +73,10 @@ deploy:
   script:
     - scp -o StrictHostKeyChecking=no docker-compose.yml $VM_USER@$VM_IP:~/
     - ssh -o StrictHostKeyChecking=no $VM_USER@$VM_IP "
-        echo '$CI_REGISTRY_PASSWORD' | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin 2>/dev/null &&
-        export CI_REGISTRY='$CI_REGISTRY' &&
-        export CI_REGISTRY_USER='$CI_REGISTRY_USER' &&
-        docker compose down 2>/dev/null || true &&
-        docker compose pull &&
-        docker compose up -d &&
+        echo '$CI_REGISTRY_PASSWORD' | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin 2>/dev/null
+        docker compose down 2>/dev/null || true
+        docker compose pull
+        docker compose up -d
         docker compose ps
       "
   tags:
@@ -128,6 +84,6 @@ deploy:
   only:
     - main
   needs:
-    - push_vote
-    - push_result
-    - push_worker
+    - build_vote
+    - build_result
+    - build_worker

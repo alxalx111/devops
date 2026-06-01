@@ -14,7 +14,7 @@
 - **redis** - брокер сообщений для сбора голосов
 - **postgres** - база данных для хранения результатов
 
-На OTUS GitLab [OTUS GitLab example-voting-app](https://otusteam.gitlab.yandexcloud.net/devops/devops-2026-03/example-voting-app)
+Проект размещен в OTUS GitLab: [example-voting-app](https://otusteam.gitlab.yandexcloud.net/devops/devops-2026-03/example-voting-app)
 
 ---
 
@@ -24,8 +24,7 @@ Pipeline состоит из следующих этапов:
 
 | Stage | Описание |
 |-------|----------|
-| `build` | Сборка Docker-образов |
-| `push` | Публикация образов в GitLab Registry |
+| `build` | Сборка Docker-образов с использованием **Docker-in-Docker (DinD)** |
 | `deploy` | Деплой приложения на ВМ в Yandex Cloud |
 
 ---
@@ -39,7 +38,7 @@ Pipeline состоит из следующих этапов:
 | `CI_REGISTRY` | `otusteam.gitlab.yandexcloud.net:5050` | ❌ No | ❌ No |
 | `CI_REGISTRY_USER` | `elm.g2016@yandex.ru` | ❌ No | ❌ No |
 | `CI_REGISTRY_PASSWORD` | `glpat-токен` | ❌ No | ✅ Yes |
-| `VM_IP` | `81.26.191.124` | ❌ No | ❌ No |
+| `VM_IP` | `81.26.181.218` | ❌ No | ❌ No |
 | `VM_USER` | `elv` | ❌ No | ❌ No |
 | `VM_SSH_KEY` | `-----BEGIN OPENSSH PRIVATE KEY-----...` | ❌ No | ✅ Yes |
 
@@ -49,14 +48,30 @@ Pipeline состоит из следующих этапов:
 
 ![vms](yandex-vms.png)
 
-| ВМ | Назначение |
-|----|-----------|
-| `docker-vm` | GitLab Runner для сборки и деплоя |
-| `deploy-server` | Целевая ВМ для развертывания приложения |
+| ВМ | Назначение | IP |
+|----|-----------|-----|
+| `docker-vm` | GitLab Runner для сборки и деплоя | `81.26.184.29` |
+| `deploy-server` | Целевая ВМ для развертывания приложения | `81.26.181.218` |
 
 ---
 
-## 3. Исправление worker/Dockerfile
+## 3. Настройка GitLab Runner для DinD
+
+Для работы Docker-in-Docker необходима правильная настройка раннера:
+
+```toml
+[[runners]]
+  executor = "docker"
+  [runners.docker]
+    image = "docker:latest"
+    privileged = true   # обязательно для DinD
+```
+
+На ВМ `docker-vm` выполнена регистрация раннера с executor `docker` и привилегированным режимом.
+
+---
+
+## 4. Исправление worker/Dockerfile
 
 В процессе настройки pipeline возникла проблема со сборкой worker-сервиса. Оригинальный Dockerfile содержал строку:
 
@@ -72,16 +87,11 @@ failed to parse platform : "" is an invalid OS component
 
 ### Исправление:
 
-Было принято решение **убрать `--platform=${BUILDPLATFORM}`** и использовать стандартный образ без указания платформы, так как сборка происходит на amd64-хосте и не требует кроссплатформенности.
+Было принято решение **убрать `--platform=${BUILDPLATFORM}`** и использовать стандартный образ без указания платформы, так как сборка происходит на amd64-хосте.
 
 **Исправленный worker/Dockerfile:**
 
 ```dockerfile
-# because of dotnet, we always build on amd64, and target platforms in cli
-# dotnet doesn't support QEMU for building or running.
-# (errors common in arm/v7 32bit) https://github.com/dotnet/dotnet-docker/issues/1537
-
-# build compiles the program for the builder's local platform
 FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
 ARG TARGETPLATFORM
 ARG TARGETARCH
@@ -95,7 +105,6 @@ RUN dotnet restore -a $TARGETARCH
 COPY . .
 RUN dotnet publish -c release -o /app -a $TARGETARCH --self-contained false --no-restore
 
-# app image
 FROM mcr.microsoft.com/dotnet/runtime:7.0
 WORKDIR /app
 COPY --from=build /app .
@@ -110,17 +119,12 @@ ENTRYPOINT ["dotnet", "Worker.dll"]
 build_worker:
   stage: build
   script:
-    - |
-      docker build \
-        --build-arg BUILDPLATFORM=linux/amd64 \
-        --build-arg TARGETPLATFORM=linux/amd64 \
-        --build-arg TARGETARCH=amd64 \
-        -t $IMAGE_NAME_WORKER:$IMAGE_TAG ./worker
+    - docker build --build-arg BUILDPLATFORM=linux/amd64 --build-arg TARGETPLATFORM=linux/amd64 --build-arg TARGETARCH=amd64 -t $IMAGE_NAME_WORKER:$IMAGE_TAG ./worker
 ```
 
 ---
 
-## 4. Проблема с подключением к базе данных и её решение
+## 5. Проблема с подключением к базе данных и её решение
 
 ### Обнаруженная проблема:
 
@@ -128,7 +132,6 @@ build_worker:
 
 ```bash
 docker logs worker --tail 10
-Waiting for db
 Waiting for db
 Waiting for db
 ...
@@ -142,34 +145,23 @@ Waiting for db
 OpenDbConnection("Server=db;Username=postgres;Password=postgres;");
 ```
 
-Worker искал сервис с именем **`db`**, но в `docker-compose.yml` сервис назывался **`postgres-db`**. Имена не совпадали, поэтому worker не мог найти базу данных.
+Worker искал сервис с именем **`db`**, но в `docker-compose.yml` сервис назывался **`postgres-db`**. Имена не совпадали.
 
 ### Решение:
 
-Было принято **переименовать сервис в `docker-compose.yml` с `postgres-db` на `db`**:
+Переименован сервис в `docker-compose.yml` с `postgres-db` на `db`:
 
 ```yaml
 # Было
 services:
   postgres-db:
     image: postgres:15-alpine
-    ...
 
 # Стало
 services:
   db:
     image: postgres:15-alpine
-    container_name: postgres-db  # имя контейнера оставлено прежним
-    ...
-```
-
-Worker также зависит от сервиса `db`:
-
-```yaml
-worker:
-  depends_on:
-    db:
-      condition: service_healthy
+    container_name: postgres-db   # имя контейнера оставлено прежним
 ```
 
 ### Результат:
@@ -185,29 +177,33 @@ Found redis at 172.18.0.2
 
 ---
 
-## 5. .gitlab-ci.yml
+## 6. .gitlab-ci.yml (DinD)
 
 ```yaml
 stages:
   - build
-  - push
   - deploy
 
 variables:
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
   IMAGE_TAG: $CI_COMMIT_SHORT_SHA
   IMAGE_NAME_VOTE: $CI_REGISTRY/devops/devops-2026-03/example-voting-app/voting-app
   IMAGE_NAME_RESULT: $CI_REGISTRY/devops/devops-2026-03/example-voting-app/result-app
   IMAGE_NAME_WORKER: $CI_REGISTRY/devops/devops-2026-03/example-voting-app/worker-app
 
-# ============================================
-# CI: Сборка Docker-образов
-# ============================================
-
 build_vote:
   stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
     - docker build -t $IMAGE_NAME_VOTE:$IMAGE_TAG ./vote
     - docker build -t $IMAGE_NAME_VOTE:latest ./vote
+    - docker push $IMAGE_NAME_VOTE:$IMAGE_TAG
+    - docker push $IMAGE_NAME_VOTE:latest
   tags:
     - docker
   only:
@@ -215,9 +211,16 @@ build_vote:
 
 build_result:
   stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
     - docker build -t $IMAGE_NAME_RESULT:$IMAGE_TAG ./result
     - docker build -t $IMAGE_NAME_RESULT:latest ./result
+    - docker push $IMAGE_NAME_RESULT:$IMAGE_TAG
+    - docker push $IMAGE_NAME_RESULT:latest
   tags:
     - docker
   only:
@@ -225,78 +228,25 @@ build_result:
 
 build_worker:
   stage: build
-  script:
-    - |
-      docker build \
-        --build-arg BUILDPLATFORM=linux/amd64 \
-        --build-arg TARGETPLATFORM=linux/amd64 \
-        --build-arg TARGETARCH=amd64 \
-        -t $IMAGE_NAME_WORKER:$IMAGE_TAG ./worker
-    - |
-      docker build \
-        --build-arg BUILDPLATFORM=linux/amd64 \
-        --build-arg TARGETPLATFORM=linux/amd64 \
-        --build-arg TARGETARCH=amd64 \
-        -t $IMAGE_NAME_WORKER:latest ./worker
-  tags:
-    - docker
-  only:
-    - main
-
-# ============================================
-# CD: Публикация образов в Registry
-# ============================================
-
-push_vote:
-  stage: push
+  image: docker:latest
+  services:
+    - docker:dind
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
-    - docker push $IMAGE_NAME_VOTE:$IMAGE_TAG
-    - docker push $IMAGE_NAME_VOTE:latest
-  tags:
-    - docker
-  only:
-    - main
-  needs:
-    - build_vote
-
-push_result:
-  stage: push
-  before_script:
-    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
-  script:
-    - docker push $IMAGE_NAME_RESULT:$IMAGE_TAG
-    - docker push $IMAGE_NAME_RESULT:latest
-  tags:
-    - docker
-  only:
-    - main
-  needs:
-    - build_result
-
-push_worker:
-  stage: push
-  before_script:
-    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
-  script:
+    - docker build --build-arg BUILDPLATFORM=linux/amd64 --build-arg TARGETPLATFORM=linux/amd64 --build-arg TARGETARCH=amd64 -t $IMAGE_NAME_WORKER:$IMAGE_TAG ./worker
+    - docker build --build-arg BUILDPLATFORM=linux/amd64 --build-arg TARGETPLATFORM=linux/amd64 --build-arg TARGETARCH=amd64 -t $IMAGE_NAME_WORKER:latest ./worker
     - docker push $IMAGE_NAME_WORKER:$IMAGE_TAG
     - docker push $IMAGE_NAME_WORKER:latest
   tags:
     - docker
   only:
     - main
-  needs:
-    - build_worker
-
-# ============================================
-# CD: Деплой на Yandex Cloud
-# ============================================
 
 deploy:
   stage: deploy
   before_script:
-    - sudo apt-get update -qq && sudo apt-get install -y -qq openssh-client rsync
+    - apt-get update -qq && apt-get install -y -qq openssh-client rsync
     - eval $(ssh-agent -s)
     - echo "$VM_SSH_KEY" | tr -d '\r' | ssh-add - > /dev/null
     - mkdir -p ~/.ssh
@@ -305,12 +255,10 @@ deploy:
   script:
     - scp -o StrictHostKeyChecking=no docker-compose.yml $VM_USER@$VM_IP:~/
     - ssh -o StrictHostKeyChecking=no $VM_USER@$VM_IP "
-        echo '$CI_REGISTRY_PASSWORD' | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin 2>/dev/null &&
-        export CI_REGISTRY='$CI_REGISTRY' &&
-        export CI_REGISTRY_USER='$CI_REGISTRY_USER' &&
-        docker compose down 2>/dev/null || true &&
-        docker compose pull &&
-        docker compose up -d &&
+        echo '$CI_REGISTRY_PASSWORD' | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin 2>/dev/null
+        docker compose down 2>/dev/null || true
+        docker compose pull
+        docker compose up -d
         docker compose ps
       "
   tags:
@@ -318,14 +266,14 @@ deploy:
   only:
     - main
   needs:
-    - push_vote
-    - push_result
-    - push_worker
+    - build_vote
+    - build_result
+    - build_worker
 ```
 
 ---
 
-## 6. Docker-compose.yml для деплоя
+## 7. Docker-compose.yml для деплоя
 
 ```yaml
 networks:
@@ -406,24 +354,19 @@ services:
 
 ---
 
-## 7. Идемпотентность сборки и деплоя
+## 8. Идемпотентность сборки и деплоя
 
-### 7.1 Идемпотентность CI (сборка)
+### 8.1 Идемпотентность CI (сборка)
 
 - Образы тегируются как `$CI_COMMIT_SHORT_SHA` и `latest`
 - При повторном запуске с тем же коммитом — пересборка происходит заново
-- Используется кэширование Docker-слоев
+- DinD обеспечивает изолированную среду сборки
 
-### 7.2 Идемпотентность CD (деплой)
+### 8.2 Идемпотентность CD (деплой)
 
 ```bash
-# Остановка старых контейнеров (не падает, если контейнеров нет)
 docker compose down 2>/dev/null || true
-
-# Pull свежих образов (только если есть изменения)
 docker compose pull
-
-# Запуск (создаст новые контейнеры, если их нет)
 docker compose up -d
 ```
 
@@ -434,25 +377,25 @@ docker compose up -d
 
 ---
 
-## 8. Запуск pipeline
+## 9. Запуск pipeline
 
-### 8.1 Успешный запуск
+### 9.1 Успешный запуск
 
 ![Pipeline Success](pipeline.png)
 
-### 8.2 Результат деплоя на ВМ
+### 9.2 Результат деплоя на ВМ
 
 ```bash
 elv@deploy-server:~$ docker compose ps
 NAME          IMAGE                                                                                             COMMAND                  SERVICE      STATUS                    PORTS
 postgres-db   postgres:15-alpine                                                                                "docker-entrypoint.s…"   db           Up (healthy)               5432/tcp
 redis         redis:alpine                                                                                      "docker-entrypoint.s…"   redis        Up (healthy)               6379/tcp
-result-app    otusteam.gitlab.yandexcloud.net:5050/devops/devops-2026-03/example-voting-app/result-app:latest   "/usr/bin/tini -- no…"   result-app   Up                         0.0.0.0:8081->80/tcp
-voting-app    otusteam.gitlab.yandexcloud.net:5050/devops/devops-2026-03/example-voting-app/voting-app:latest   "gunicorn app:app -b…"   voting-app   Up                         0.0.0.0:8080->80/tcp
-worker        otusteam.gitlab.yandexcloud.net:5050/devops/devops-2026-03/example-voting-app/worker-app:latest   "dotnet Worker.dll"      worker       Up
+result-app    otusteam.gitlab.yandexcloud.net:5050/.../result-app:latest                                        "/usr/bin/tini -- no…"   result-app   Up                         0.0.0.0:8081->80/tcp
+voting-app    otusteam.gitlab.yandexcloud.net:5050/.../voting-app:latest                                        "gunicorn app:app -b…"   voting-app   Up                         0.0.0.0:8080->80/tcp
+worker        otusteam.gitlab.yandexcloud.net:5050/.../worker-app:latest                                        "dotnet Worker.dll"      worker       Up
 ```
 
-### 8.3 Логи worker (успешное подключение)
+### 9.3 Логи worker (успешное подключение)
 
 ```bash
 elv@deploy-server:~$ docker logs worker --tail 50
@@ -463,10 +406,10 @@ Found redis at 172.18.0.2
 
 ---
 
-## 9. Доступ к приложению
+## 10. Доступ к приложению
 
-- **Приложение для голосования:** `http://81.26.191.124:8080`
-- **Приложение для результатов:** `http://81.26.191.124:8081`
+- **Приложение для голосования:** `http://81.26.181.218:8080`
+- **Приложение для результатов:** `http://81.26.181.218:8081`
 
 **Скриншот: Voting App**
 
@@ -478,11 +421,11 @@ Found redis at 172.18.0.2
 
 ---
 
-## 10. Полная структура репозитория
+## 11. Полная структура репозитория
 
 ```
 example-voting-app/
-├── .gitlab-ci.yml          # CI/CD pipeline
+├── .gitlab-ci.yml          # CI/CD pipeline (DinD)
 ├── docker-compose.yml      # Docker Compose для деплоя
 ├── vote/
 │   └── Dockerfile
@@ -497,7 +440,7 @@ example-voting-app/
 
 ## Выводы
 
-1. ✅ Написан GitLab CI/CD pipeline для сборки приложения
+1. ✅ Написан GitLab CI/CD pipeline для сборки приложения с использованием **Docker-in-Docker (DinD)**
 2. ✅ Реализована публикация образов в GitLab Registry
 3. ✅ Настроен автоматический деплой на ВМ в Yandex Cloud
 4. ✅ Обеспечена идемпотентность сборки и деплоя
