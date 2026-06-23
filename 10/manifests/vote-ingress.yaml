@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vote-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: "yc-clusterissuer"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - vote.ddgames.ru
+    secretName: vote-tls
+  rules:
+  - host: vote.ddgames.ru
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: vote
+            port:
+              number: 8080

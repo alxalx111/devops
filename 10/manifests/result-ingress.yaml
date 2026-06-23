@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: result-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: "yc-clusterissuer"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - result.ddgames.ru
+    secretName: result-tls
+  rules:
+  - host: result.ddgames.ru
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: result
+            port:
+              number: 8081
