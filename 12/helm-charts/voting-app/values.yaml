@@ -1,0 +1,53 @@
+replicaCount: 1
+
+imageTag: latest
+
+images:
+  vote: otusteam.gitlab.yandexcloud.net:5050/devops/devops-2026-03/example-voting-app/voting-app
+  result: otusteam.gitlab.yandexcloud.net:5050/devops/devops-2026-03/example-voting-app/result-app
+  worker: otusteam.gitlab.yandexcloud.net:5050/devops/devops-2026-03/example-voting-app/worker-app
+  db: postgres:15-alpine
+  redis: redis:alpine
+
+postgres:
+  user: postgres
+  password: postgres
+
+# ===== ДОБАВЛЕНО =====
+persistence:
+  enabled: true
+  db:
+    storageClass: local-path
+    size: 10Gi
+  redis:
+    storageClass: local-path
+    size: 5Gi
+# ==============================
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    vote: vote.ddgames.ru
+    result: result.ddgames.ru
+  tls:
+    enabled: true
+    voteSecretName: vote-tls
+    resultSecretName: result-tls
+
+services:
+  vote:
+    port: 8080
+    targetPort: 80
+  result:
+    port: 8081
+    targetPort: 80
+  db:
+    port: 5432
+  redis:
+    port: 6379
+
+imagePullSecrets:
+  - name: gitlab-registry
