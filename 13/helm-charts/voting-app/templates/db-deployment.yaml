@@ -30,4 +30,5 @@ spec:
           name: db-data
       volumes:
       - name: db-data
-        emptyDir: {}
+        persistentVolumeClaim:
+          claimName: postgres-pvc

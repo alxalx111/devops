@@ -13,6 +13,17 @@ postgres:
   user: postgres
   password: postgres
 
+# ===== ДОБАВЛЕНО =====
+persistence:
+  enabled: true
+  db:
+    storageClass: local-path
+    size: 10Gi
+  redis:
+    storageClass: local-path
+    size: 5Gi
+# ==============================
+
 ingress:
   enabled: true
   className: nginx

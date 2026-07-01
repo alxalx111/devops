@@ -11,9 +11,10 @@ variables:
   HELM_RELEASE_NAME: "voting-app"
   HELM_NAMESPACE: "default"
   IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+  REGISTRY_BASE: $CI_REGISTRY/devops/devops-2026-03/example-voting-app
 
 # ============================================
-# 1. LINT HELM-ЧАРТА
+# 1. LINT HELM-ЧАРТА (только если есть изменения в чарте)
 # ============================================
 helm-lint:
   stage: lint
@@ -24,9 +25,13 @@ helm-lint:
     - helm lint $HELM_CHART_PATH --strict
   tags:
     - docker
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - helm-charts/**/*
 
 # ============================================
-# 2. СБОРКА DOCKER-ОБРАЗОВ (ТОЛЬКО ПОСЛЕ УСПЕШНОГО LINT)
+# 2. СБОРКА DOCKER-ОБРАЗОВ
 # ============================================
 build_vote:
   stage: build
@@ -34,16 +39,24 @@ build_vote:
   services:
     - docker:dind
   needs:
-    - helm-lint
+    - job: helm-lint
+      optional: true
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
-    - docker build -t $CI_REGISTRY/devops/devops-2026-03/example-voting-app/voting-app:$IMAGE_TAG ./vote
-    - docker push $CI_REGISTRY/devops/devops-2026-03/example-voting-app/voting-app:$IMAGE_TAG
+    - echo "🔨 Собираем образ voting-app..."
+    - docker build -t $REGISTRY_BASE/voting-app:$IMAGE_TAG ./vote
+    - docker push $REGISTRY_BASE/voting-app:$IMAGE_TAG
+    - docker tag $REGISTRY_BASE/voting-app:$IMAGE_TAG $REGISTRY_BASE/voting-app:latest
+    - docker push $REGISTRY_BASE/voting-app:latest
   tags:
     - docker
-  only:
-    - main
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - vote/**/*
+        - Dockerfile
+  allow_failure: false
 
 build_result:
   stage: build
@@ -51,16 +64,24 @@ build_result:
   services:
     - docker:dind
   needs:
-    - helm-lint
+    - job: helm-lint
+      optional: true
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
-    - docker build -t $CI_REGISTRY/devops/devops-2026-03/example-voting-app/result-app:$IMAGE_TAG ./result
-    - docker push $CI_REGISTRY/devops/devops-2026-03/example-voting-app/result-app:$IMAGE_TAG
+    - echo "🔨 Собираем образ result-app..."
+    - docker build -t $REGISTRY_BASE/result-app:$IMAGE_TAG ./result
+    - docker push $REGISTRY_BASE/result-app:$IMAGE_TAG
+    - docker tag $REGISTRY_BASE/result-app:$IMAGE_TAG $REGISTRY_BASE/result-app:latest
+    - docker push $REGISTRY_BASE/result-app:latest
   tags:
     - docker
-  only:
-    - main
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - result/**/*
+        - Dockerfile
+  allow_failure: false
 
 build_worker:
   stage: build
@@ -68,16 +89,28 @@ build_worker:
   services:
     - docker:dind
   needs:
-    - helm-lint
+    - job: helm-lint
+      optional: true
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
   script:
-    - docker build --build-arg BUILDPLATFORM=linux/amd64 --build-arg TARGETPLATFORM=linux/amd64 --build-arg TARGETARCH=amd64 -t $CI_REGISTRY/devops/devops-2026-03/example-voting-app/worker-app:$IMAGE_TAG ./worker
-    - docker push $CI_REGISTRY/devops/devops-2026-03/example-voting-app/worker-app:$IMAGE_TAG
+    - echo "🔨 Собираем образ worker-app..."
+    - docker build --build-arg BUILDPLATFORM=linux/amd64 --build-arg TARGETPLATFORM=linux/amd64 --build-arg TARGETARCH=amd64 -t $REGISTRY_BASE/worker-app:$IMAGE_TAG ./worker
+    - docker push $REGISTRY_BASE/worker-app:$IMAGE_TAG
+    - docker tag $REGISTRY_BASE/worker-app:$IMAGE_TAG $REGISTRY_BASE/worker-app:latest
+    - docker push $REGISTRY_BASE/worker-app:latest
   tags:
     - docker
-  only:
-    - main
+  # cache:
+  #   key: "worker-docker-cache"
+  #   paths:
+  #     - /var/lib/docker
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - worker/**/*
+        - Dockerfile
+  allow_failure: false
 
 # ============================================
 # 3. ДЕПЛОЙ ЧЕРЕЗ HELM
@@ -85,12 +118,8 @@ build_worker:
 deploy:
   stage: deploy
   image: alpine:latest
-  needs:
-    - build_vote
-    - build_result
-    - build_worker
   before_script:
-    - apk add --no-cache curl bash helm
+    - apk add --no-cache curl bash helm jq
     - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
     - chmod +x kubectl && mv kubectl /usr/local/bin/
     - echo "$KUBECONFIG_CONTENT" > /tmp/kubeconfig
@@ -116,10 +145,6 @@ deploy:
       helm install $HELM_RELEASE_NAME . \
         --namespace $HELM_NAMESPACE \
         --create-namespace \
-        --set imageTag=$IMAGE_TAG \
-        --set images.vote=$CI_REGISTRY/devops/devops-2026-03/example-voting-app/voting-app \
-        --set images.result=$CI_REGISTRY/devops/devops-2026-03/example-voting-app/result-app \
-        --set images.worker=$CI_REGISTRY/devops/devops-2026-03/example-voting-app/worker-app \
         --set imagePullSecrets[0].name=gitlab-registry \
         --set ingress.enabled=true \
         --set ingress.className=nginx \
@@ -128,19 +153,7 @@ deploy:
         --set ingress.hosts.result=result.ddgames.ru \
         --set ingress.tls.enabled=true \
         --set ingress.tls.voteSecretName=vote-tls \
-        --set ingress.tls.resultSecretName=result-tls \
-        --wait \
-        --timeout 5m
-    
-    - kubectl get pods -n $HELM_NAMESPACE
-    - kubectl get svc -n $HELM_NAMESPACE
-    - kubectl get ingress -n $HELM_NAMESPACE
-    
-    - |
-      INGRESS_IP=$(kubectl get svc ingress-nginx-controller -n default -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-      echo "Ingress IP: $INGRESS_IP"
-      curl -s -o /dev/null -w "Vote App HTTP Status: %{http_code}\n" -H "Host: vote.ddgames.ru" http://$INGRESS_IP
-      curl -s -o /dev/null -w "Result App HTTP Status: %{http_code}\n" -H "Host: result.ddgames.ru" http://$INGRESS_IP
+        --set ingress.tls.resultSecretName=result-tls
   environment:
     name: production
     url: https://vote.ddgames.ru
