@@ -1,0 +1,443 @@
+{
+  "version": 4,
+  "terraform_version": "1.15.7",
+  "serial": 7,
+  "lineage": "fe072d95-b479-6ebf-dd71-e1fa370916b6",
+  "outputs": {
+    "cluster_name": {
+      "value": "k3s-cluster-staging",
+      "type": "string"
+    },
+    "environment": {
+      "value": "staging",
+      "type": "string"
+    },
+    "kubeconfig_command": {
+      "value": "ssh ubuntu@<MASTER_IP> sudo cat /etc/rancher/k3s/k3s.yaml",
+      "type": "string"
+    },
+    "master_ip": {
+      "value": "<MASTER_IP>",
+      "type": "string"
+    },
+    "worker_ips": {
+      "value": [
+        "<WORKER_IP>"
+      ],
+      "type": [
+        "tuple",
+        [
+          "string"
+        ]
+      ]
+    }
+  },
+  "resources": [
+    {
+      "mode": "managed",
+      "type": "yandex_compute_instance",
+      "name": "master",
+      "provider": "provider[\"registry.terraform.io/yandex-cloud/yandex\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 1,
+          "attributes": {
+            "allow_recreate": null,
+            "allow_stopping_for_update": null,
+            "boot_disk": [
+              {
+                "auto_delete": true,
+                "device_name": "<DEVICE_NAME>",
+                "disk_id": "<DISK_ID>",
+                "initialize_params": [
+                  {
+                    "block_size": 4096,
+                    "description": "",
+                    "image_id": "fd806c8slu9j1pa87msc",
+                    "kms_key_id": "",
+                    "name": "",
+                    "size": 30,
+                    "snapshot_id": "",
+                    "type": "network-hdd"
+                  }
+                ],
+                "mode": "READ_WRITE"
+              }
+            ],
+            "created_at": "2026-07-09T17:30:28Z",
+            "description": "",
+            "filesystem": [],
+            "folder_id": "<FOLDER_ID>",
+            "fqdn": "k3s-master-staging-1.ru-central1.internal",
+            "gpu_cluster_id": "",
+            "hardware_generation": [
+              {
+                "generation2_features": [],
+                "legacy_features": [
+                  {
+                    "pci_topology": "PCI_TOPOLOGY_V2"
+                  }
+                ]
+              }
+            ],
+            "hostname": "k3s-master-staging-1",
+            "id": "<INSTANCE_ID>",
+            "labels": null,
+            "local_disk": [],
+            "maintenance_grace_period": "",
+            "maintenance_policy": null,
+            "metadata": {
+              "ssh-keys": "ubuntu:<SSH_PUBLIC_KEY>"
+            },
+            "metadata_options": [
+              {
+                "aws_v1_http_endpoint": 1,
+                "aws_v1_http_token": 2,
+                "aws_v2_http_endpoint": 1,
+                "aws_v2_http_token": 1,
+                "gce_http_endpoint": 1,
+                "gce_http_token": 1
+              }
+            ],
+            "name": "k3s-master-staging-1",
+            "network_acceleration_type": "standard",
+            "network_interface": [
+              {
+                "dns_record": [],
+                "index": 0,
+                "ip_address": "10.20.0.35",
+                "ipv4": true,
+                "ipv6": false,
+                "ipv6_address": "",
+                "ipv6_dns_record": [],
+                "mac_address": "<MAC_ADDRESS>",
+                "nat": true,
+                "nat_dns_record": [],
+                "nat_ip_address": "<MASTER_IP>",
+                "nat_ip_version": "IPV4",
+                "security_group_ids": [
+                  "<SECURITY_GROUP_ID>"
+                ],
+                "subnet_id": "<SUBNET_ID>"
+              }
+            ],
+            "placement_policy": [
+              {
+                "host_affinity_rules": [],
+                "placement_group_id": "",
+                "placement_group_partition": 0
+              }
+            ],
+            "platform_id": "standard-v2",
+            "resources": [
+              {
+                "core_fraction": 100,
+                "cores": 2,
+                "gpus": 0,
+                "memory": 4
+              }
+            ],
+            "scheduling_policy": [
+              {
+                "preemptible": false
+              }
+            ],
+            "secondary_disk": [],
+            "service_account_id": "",
+            "status": "running",
+            "timeouts": null,
+            "zone": "ru-central1-a"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "<PRIVATE_DATA>",
+          "dependencies": [
+            "yandex_vpc_network.app_network",
+            "yandex_vpc_security_group.app_sg",
+            "yandex_vpc_subnet.app_subnet"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "yandex_compute_instance",
+      "name": "worker",
+      "provider": "provider[\"registry.terraform.io/yandex-cloud/yandex\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 1,
+          "attributes": {
+            "allow_recreate": null,
+            "allow_stopping_for_update": null,
+            "boot_disk": [
+              {
+                "auto_delete": true,
+                "device_name": "<DEVICE_NAME>",
+                "disk_id": "<DISK_ID>",
+                "initialize_params": [
+                  {
+                    "block_size": 4096,
+                    "description": "",
+                    "image_id": "fd806c8slu9j1pa87msc",
+                    "kms_key_id": "",
+                    "name": "",
+                    "size": 30,
+                    "snapshot_id": "",
+                    "type": "network-hdd"
+                  }
+                ],
+                "mode": "READ_WRITE"
+              }
+            ],
+            "created_at": "2026-07-09T17:30:29Z",
+            "description": "",
+            "filesystem": [],
+            "folder_id": "<FOLDER_ID>",
+            "fqdn": "k3s-worker-staging-1.ru-central1.internal",
+            "gpu_cluster_id": "",
+            "hardware_generation": [
+              {
+                "generation2_features": [],
+                "legacy_features": [
+                  {
+                    "pci_topology": "PCI_TOPOLOGY_V2"
+                  }
+                ]
+              }
+            ],
+            "hostname": "k3s-worker-staging-1",
+            "id": "<INSTANCE_ID>",
+            "labels": null,
+            "local_disk": [],
+            "maintenance_grace_period": "",
+            "maintenance_policy": null,
+            "metadata": {
+              "ssh-keys": "ubuntu:<SSH_PUBLIC_KEY>"
+            },
+            "metadata_options": [
+              {
+                "aws_v1_http_endpoint": 1,
+                "aws_v1_http_token": 2,
+                "aws_v2_http_endpoint": 1,
+                "aws_v2_http_token": 1,
+                "gce_http_endpoint": 1,
+                "gce_http_token": 1
+              }
+            ],
+            "name": "k3s-worker-staging-1",
+            "network_acceleration_type": "standard",
+            "network_interface": [
+              {
+                "dns_record": [],
+                "index": 0,
+                "ip_address": "10.20.0.24",
+                "ipv4": true,
+                "ipv6": false,
+                "ipv6_address": "",
+                "ipv6_dns_record": [],
+                "mac_address": "<MAC_ADDRESS>",
+                "nat": true,
+                "nat_dns_record": [],
+                "nat_ip_address": "<WORKER_IP>",
+                "nat_ip_version": "IPV4",
+                "security_group_ids": [
+                  "<SECURITY_GROUP_ID>"
+                ],
+                "subnet_id": "<SUBNET_ID>"
+              }
+            ],
+            "placement_policy": [
+              {
+                "host_affinity_rules": [],
+                "placement_group_id": "",
+                "placement_group_partition": 0
+              }
+            ],
+            "platform_id": "standard-v2",
+            "resources": [
+              {
+                "core_fraction": 100,
+                "cores": 2,
+                "gpus": 0,
+                "memory": 4
+              }
+            ],
+            "scheduling_policy": [
+              {
+                "preemptible": false
+              }
+            ],
+            "secondary_disk": [],
+            "service_account_id": "",
+            "status": "running",
+            "timeouts": null,
+            "zone": "ru-central1-a"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "<PRIVATE_DATA>",
+          "dependencies": [
+            "yandex_vpc_network.app_network",
+            "yandex_vpc_security_group.app_sg",
+            "yandex_vpc_subnet.app_subnet"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "yandex_vpc_network",
+      "name": "app_network",
+      "provider": "provider[\"registry.terraform.io/yandex-cloud/yandex\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "created_at": "2026-07-09T17:30:26Z",
+            "default_security_group_id": "<SECURITY_GROUP_ID>",
+            "description": "",
+            "folder_id": "<FOLDER_ID>",
+            "id": "<NETWORK_ID>",
+            "labels": {},
+            "name": "voting-app-network-staging",
+            "subnet_ids": [],
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "<PRIVATE_DATA>"
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "yandex_vpc_security_group",
+      "name": "app_sg",
+      "provider": "provider[\"registry.terraform.io/yandex-cloud/yandex\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "created_at": "2026-07-09T17:30:27Z",
+            "description": "Security group for voting app - staging",
+            "egress": [
+              {
+                "description": "Allow all outbound",
+                "from_port": -1,
+                "id": "<RULE_ID>",
+                "labels": {},
+                "port": -1,
+                "predefined_target": "",
+                "protocol": "ANY",
+                "security_group_id": "",
+                "to_port": -1,
+                "v4_cidr_blocks": [
+                  "0.0.0.0/0"
+                ],
+                "v6_cidr_blocks": []
+              }
+            ],
+            "folder_id": "<FOLDER_ID>",
+            "id": "<SECURITY_GROUP_ID>",
+            "ingress": [
+              {
+                "description": "K3s API",
+                "from_port": -1,
+                "id": "<RULE_ID>",
+                "labels": {},
+                "port": 6443,
+                "predefined_target": "",
+                "protocol": "TCP",
+                "security_group_id": "",
+                "to_port": -1,
+                "v4_cidr_blocks": [
+                  "0.0.0.0/0"
+                ],
+                "v6_cidr_blocks": []
+              },
+              {
+                "description": "NodePort Services",
+                "from_port": 30000,
+                "id": "<RULE_ID>",
+                "labels": {},
+                "port": -1,
+                "predefined_target": "",
+                "protocol": "TCP",
+                "security_group_id": "",
+                "to_port": 32767,
+                "v4_cidr_blocks": [
+                  "0.0.0.0/0"
+                ],
+                "v6_cidr_blocks": []
+              },
+              {
+                "description": "SSH",
+                "from_port": -1,
+                "id": "<RULE_ID>",
+                "labels": {},
+                "port": 22,
+                "predefined_target": "",
+                "protocol": "TCP",
+                "security_group_id": "",
+                "to_port": -1,
+                "v4_cidr_blocks": [
+                  "0.0.0.0/0"
+                ],
+                "v6_cidr_blocks": []
+              }
+            ],
+            "labels": {},
+            "name": "voting-app-sg-staging",
+            "network_id": "<NETWORK_ID>",
+            "status": "ACTIVE",
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "<PRIVATE_DATA>",
+          "dependencies": [
+            "yandex_vpc_network.app_network"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "yandex_vpc_subnet",
+      "name": "app_subnet",
+      "provider": "provider[\"registry.terraform.io/yandex-cloud/yandex\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "created_at": "2026-07-09T17:30:27Z",
+            "description": "",
+            "dhcp_options": [],
+            "folder_id": "<FOLDER_ID>",
+            "id": "<SUBNET_ID>",
+            "labels": {},
+            "name": "voting-app-subnet-staging",
+            "network_id": "<NETWORK_ID>",
+            "route_table_id": "",
+            "timeouts": null,
+            "v4_cidr_blocks": [
+              "10.20.0.0/24"
+            ],
+            "v6_cidr_blocks": [],
+            "zone": "ru-central1-a"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "<PRIVATE_DATA>",
+          "dependencies": [
+            "yandex_vpc_network.app_network"
+          ]
+        }
+      ]
+    }
+  ],
+  "check_results": null
+}
