@@ -1,0 +1,75 @@
+image: hashicorp/terraform:light
+
+variables:
+  TF_ROOT: .
+  TF_CLI_CONFIG_FILE: /root/.terraformrc
+
+cache:
+  key: "${CI_COMMIT_REF_SLUG}"
+  paths:
+    - .terraform
+
+stages:
+  - init
+  - validate
+  - plan
+  - apply
+
+terraform_init:
+  stage: init
+  tags:
+    - docker
+  script:
+    - terraform init
+  artifacts:
+    paths:
+      - .terraform
+  when: always
+
+terraform_validate:
+  stage: validate
+  tags:
+    - docker
+  script:
+    - terraform init -backend=false
+    - terraform validate
+  dependencies:
+    - terraform_init
+  when: always
+
+terraform_plan:
+  stage: plan
+  tags:
+    - docker
+  script:
+    - terraform init -backend=false
+    - |
+      terraform plan \
+        -var-file="environments/staging/terraform.tfvars" \
+        -var="access_key=${YC_ACCESS_KEY}" \
+        -var="secret_key=${YC_SECRET_KEY}" \
+        -out=tfplan
+  artifacts:
+    paths:
+      - tfplan
+  dependencies:
+    - terraform_init
+  when: always
+
+terraform_apply:
+  stage: apply
+  tags:
+    - docker
+  script:
+    - terraform init -backend=false
+    - |
+      terraform apply \
+        -var-file="environments/staging/terraform.tfvars" \
+        -var="access_key=${YC_ACCESS_KEY}" \
+        -var="secret_key=${YC_SECRET_KEY}" \
+        tfplan
+  dependencies:
+    - terraform_plan
+  when: manual
+  environment:
+    name: staging
