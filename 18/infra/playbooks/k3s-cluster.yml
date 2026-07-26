@@ -1,0 +1,163 @@
+---
+- name: Подготовка всех ВМ
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Устанавливаем hostname
+      hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: Добавляем hostname в /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        regexp: '127\.0\.1\.1'
+        line: "127.0.1.1 {{ inventory_hostname }}"
+
+    - name: Обновляем apt
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Устанавливаем базовые пакеты
+      apt:
+        name:
+          - git
+          - htop
+          - gnupg
+          - lsb-release
+          - ca-certificates
+        state: present
+
+    - name: Отключаем swap
+      command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+
+    - name: Удаляем swap из fstab
+      lineinfile:
+        path: /etc/fstab
+        regexp: 'swap'
+        state: absent
+      when: ansible_swaptotal_mb > 0
+
+    - name: Загружаем модули ядра
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - br_netfilter
+        - overlay
+
+    - name: Настраиваем sysctl
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { name: net.bridge.bridge-nf-call-iptables, value: 1 }
+        - { name: net.ipv4.ip_forward, value: 1 }
+
+    - name: Устанавливаем containerd
+      shell: |
+        curl -fsSL https://get.docker.com | sh
+      args:
+        creates: /usr/bin/docker
+
+    - name: Добавляем пользователя в docker
+      user:
+        name: elv
+        groups: docker
+        append: yes
+
+- name: Установка k3s server (master)
+  hosts: master
+  become: yes
+
+  tasks:
+    - name: Устанавливаем k3s server
+      shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} \
+          K3S_TOKEN={{ k3s_token }} \
+          INSTALL_K3S_EXEC="server \
+            --flannel-backend=host-gw \
+            --node-ip={{ ansible_host }} \
+            --cluster-cidr=10.42.0.0/16 \
+            --service-cidr=10.43.0.0/16 \
+            --cluster-domain=cluster.local" \
+          sh -
+      args:
+        creates: /usr/local/bin/k3s
+
+    - name: Создаем .kube для пользователя
+      file:
+        path: /home/elv/.kube
+        state: directory
+        owner: elv
+        group: elv
+        mode: 0755
+
+    - name: Копируем kubeconfig
+      copy:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: /home/elv/.kube/config
+        owner: elv
+        group: elv
+        mode: 0644
+        remote_src: yes
+
+    - name: Получаем токен для воркеров
+      slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: node_token
+
+    - name: Сохраняем токен в файл
+      copy:
+        content: "{{ node_token.content | b64decode }}"
+        dest: /tmp/node-token
+        owner: elv
+        group: elv
+        mode: 0644
+
+- name: Установка k3s agent (worker1, worker2)
+  hosts: worker1, worker2
+  become: yes
+
+  tasks:
+    - name: Получаем токен с мастера
+      slurp:
+        src: /tmp/node-token
+      delegate_to: master
+      register: node_token
+
+    - name: Устанавливаем k3s agent
+      shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} \
+          K3S_URL=https://{{ hostvars['master']['ansible_host'] }}:6443 \
+          K3S_TOKEN={{ node_token.content | b64decode | trim }} \
+          INSTALL_K3S_EXEC="agent \
+            --node-ip={{ ansible_host }}" \
+          sh -
+      args:
+        creates: /usr/local/bin/k3s
+
+- name: Проверка кластера
+  hosts: master
+  become: yes
+
+  tasks:
+    - name: Ждём, пока все ноды присоединятся
+      command: kubectl get nodes
+      register: kubectl_result
+      until: '"worker1" in kubectl_result.stdout and "worker2" in kubectl_result.stdout'
+      retries: 30
+      delay: 10
+
+    - name: Показываем ноды
+      command: kubectl get nodes -o wide
+      register: nodes_status
+
+    - name: Выводим статус нод
+      debug:
+        msg: "{{ nodes_status.stdout_lines }}"
